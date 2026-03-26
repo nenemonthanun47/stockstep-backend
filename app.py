@@ -100,7 +100,7 @@ def reset_all_progress():
     conn.close()
     return jsonify({"status": "success"})
 
-@app.route("/save-quiz", methods=["GET","POST"])
+@app.route("/save-quiz", methods=["POST"])
 def save_quiz():
     data = request.json
 
