@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import sqlite3
 from flask_cors import CORS
+import os
 
 app = Flask(__name__)
 CORS(app) # Enable CORS for all routes
@@ -13,13 +14,13 @@ def init_db():
     c.execute("""
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
-    xp INTEGER,
-    lesson1quiz1 INTEGER,
-    lesson1quiz2 INTEGER,
-    lesson2quiz1 INTEGER,
-    lesson2quiz2 INTEGER,
-    lesson3quiz1 INTEGER,
-    lesson3quiz2 INTEGER
+    xp INTEGER DEFAULT 0,
+    lesson1quiz1 INTEGER DEFAULT 0,
+    lesson1quiz2 INTEGER DEFAULT 0,
+    lesson2quiz1 INTEGER DEFAULT 0,
+    lesson2quiz2 INTEGER DEFAULT 0,
+    lesson3quiz1 INTEGER DEFAULT 0,
+    lesson3quiz2 INTEGER DEFAULT 0
 )
 """)
 
@@ -28,45 +29,32 @@ CREATE TABLE IF NOT EXISTS users (
     columns = [row[1] for row in c.fetchall()]
     for col in ["lesson1quiz1", "lesson1quiz2", "lesson2quiz1", "lesson2quiz2", "lesson3quiz1", "lesson3quiz2"]:
         if col not in columns:
-            c.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER")
+            c.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER DEFAULT 0")
 
-    # insert default user if not exist
-    c.execute("SELECT * FROM users WHERE id=1")
-    if not c.fetchone():
-        c.execute("INSERT INTO users (id, xp, lesson1quiz1, lesson1quiz2, lesson2quiz1, lesson2quiz2, lesson3quiz1, lesson3quiz2) VALUES (1, 0, NULL, NULL, NULL, NULL, NULL, NULL)")
+    # Always ensure row id=1 exists and initialize all columns to 0 if they are NULL
+    c.execute("INSERT OR IGNORE INTO users (id, xp) VALUES (1, 0)")
+    quiz_cols = ["lesson1quiz1", "lesson1quiz2", "lesson2quiz1", "lesson2quiz2", "lesson3quiz1", "lesson3quiz2"]
+    for col in quiz_cols:
+        c.execute(f"UPDATE users SET {col} = 0 WHERE id=1 AND {col} IS NULL")
+    
+    # Ensure XP is also non-null
+    c.execute("UPDATE users SET xp = 0 WHERE id=1 AND xp IS NULL")
 
     conn.commit()
     conn.close()
+
+# Initialize the database when the app starts
+init_db()
 
 @app.route("/")
 def home():
     return "Backend is running!"
 
-@app.route("/save-xp", methods=["POST"])
-def save_xp():
-    data = request.json
-    xp = data["xp"]
-
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-
-    c.execute("UPDATE users SET xp=? WHERE id=1", (xp,))
-    conn.commit()
-    conn.close()
-
-    return jsonify({"status": "success"})
-
 @app.route("/get-xp")
 def get_xp():
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-
-    c.execute("SELECT xp FROM users WHERE id=1")
-    xp = c.fetchone()[0]
-
-    conn.close()
-
-    return {"xp": xp}
+    # Delegate to get_progress logic to ensure consistent XP calculation
+    progress_response = get_progress()
+    return jsonify({"xp": progress_response.get_json().get("xp", 0)})
 
 @app.route("/get-progress")
 def get_progress():
@@ -76,21 +64,37 @@ def get_progress():
     c.execute("SELECT * FROM users WHERE id=1")
     user_data = c.fetchone()
     conn.close()
+
     if user_data:
-        return jsonify(dict(user_data))
+        data = dict(user_data)
+        # Ensure quiz data are integers for calculation
+        for key in ["lesson1quiz1", "lesson1quiz2", "lesson2quiz1", "lesson2quiz2", "lesson3quiz1", "lesson3quiz2"]:
+            data[key] = int(data.get(key) or 0)
+
+        xp = (
+            data["lesson1quiz1"] +
+            data["lesson1quiz2"] +
+            data["lesson2quiz1"] +
+            data["lesson2quiz2"] +
+            data["lesson3quiz1"] +
+            data["lesson3quiz2"]
+        ) * 10
+
+        data["xp"] = xp
+
+        return jsonify(data)
     else:
         # This case should be handled by init_db, but as a fallback:
-        return jsonify({"xp": 0, "lesson1quiz1": None, "lesson1quiz2": None, "lesson2quiz1": None, "lesson2quiz2": None, "lesson3quiz1": None, "lesson3quiz2": None})
+        return jsonify({"xp": 0, "lesson1quiz1": 0, "lesson1quiz2": 0, "lesson2quiz1": 0, "lesson2quiz2": 0, "lesson3quiz1": 0, "lesson3quiz2": 0})
 
 @app.route("/reset-progress", methods=["POST"])
 def reset_all_progress():
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
-    # Using NULL is better to represent "not answered"
     c.execute("""UPDATE users SET 
-                 xp=0, lesson1quiz1=NULL, lesson1quiz2=NULL, 
-                 lesson2quiz1=NULL, lesson2quiz2=NULL, 
-                 lesson3quiz1=NULL, lesson3quiz2=NULL 
+                 xp=0, lesson1quiz1=0, lesson1quiz2=0, 
+                 lesson2quiz1=0, lesson2quiz2=0, 
+                 lesson3quiz1=0, lesson3quiz2=0 
                  WHERE id=1""")
     conn.commit()
     conn.close()
@@ -113,14 +117,28 @@ def save_quiz():
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
 
-    # Use the safe f-string now that we've validated the column
-    query = f"UPDATE users SET {quiz}=? WHERE id=1"
-    c.execute(query, (value,))
+    # Ensure the row exists
+    c.execute("INSERT OR IGNORE INTO users (id, xp, lesson1quiz1, lesson1quiz2, lesson2quiz1, lesson2quiz2, lesson3quiz1, lesson3quiz2) VALUES (1, 0, 0, 0, 0, 0, 0, 0)")
 
+    # Update the specific quiz status
+    c.execute(f"UPDATE users SET {quiz}=? WHERE id=1", (value,))
+
+    # Recalculate XP directly in SQL for maximum reliability
+    c.execute("""
+        UPDATE users SET xp = (
+            COALESCE(lesson1quiz1, 0) + COALESCE(lesson1quiz2, 0) + 
+            COALESCE(lesson2quiz1, 0) + COALESCE(lesson2quiz2, 0) + 
+            COALESCE(lesson3quiz1, 0) + COALESCE(lesson3quiz2, 0)
+        ) * 10 WHERE id=1
+    """)
     conn.commit()
+
+    c.execute("SELECT xp FROM users WHERE id=1")
+    new_xp = c.fetchone()[0]
     conn.close()
 
-    return {"status": "saved"}
+    return jsonify({"status": "saved", "xp": int(new_xp)})
 
 if __name__ == "__main__":
-    app.run()
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
