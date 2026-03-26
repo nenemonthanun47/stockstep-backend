@@ -87,7 +87,7 @@ def get_progress():
         # This case should be handled by init_db, but as a fallback:
         return jsonify({"xp": 0, "lesson1quiz1": 0, "lesson1quiz2": 0, "lesson2quiz1": 0, "lesson2quiz2": 0, "lesson3quiz1": 0, "lesson3quiz2": 0})
 
-@app.route("/reset-progress", methods=["POST"])
+@app.route("/reset-progress", methods=["GET","POST"])
 def reset_all_progress():
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
@@ -100,7 +100,7 @@ def reset_all_progress():
     conn.close()
     return jsonify({"status": "success"})
 
-@app.route("/save-quiz", methods=["POST"])
+@app.route("/save-quiz", methods=["GET","POST"])
 def save_quiz():
     data = request.json
 
