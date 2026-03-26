@@ -4,7 +4,8 @@ from flask_cors import CORS
 import os
 
 app = Flask(__name__)
-CORS(app) # Enable CORS for all routes
+app.url_map.strict_slashes = False # Treat /route and /route/ the same
+CORS(app, resources={r"/*": {"origins": "*"}}) # Robust CORS config
 
 # create database
 def init_db():
@@ -90,6 +91,7 @@ def get_user_data_logic():
 def reset_all_progress():
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"})
+    
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
     c.execute("""UPDATE users SET 
@@ -101,12 +103,18 @@ def reset_all_progress():
     conn.close()
     return jsonify({"status": "success"})
 
-@app.route("/save-quiz", methods=["POST", "OPTIONS"])
+@app.route("/save-quiz", methods=["GET", "POST", "OPTIONS"])
 def save_quiz():
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"})
-    data = request.json
+        
+    if request.method == "GET":
+        return jsonify({"message": "This endpoint requires a POST request with JSON data"}), 405
 
+    data = request.json
+    if not data:
+        return jsonify({"status": "error", "message": "No JSON data provided"}), 400
+        
     quiz = data["quiz"]   # e.g. "lesson1quiz1"
     value = data["value"] # 1 or 0
 
