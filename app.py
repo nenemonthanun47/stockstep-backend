@@ -51,12 +51,12 @@ init_db()
 def home():
     return "Backend is running!"
 
-@app.route("/get-xp")
+@app.route("/get-xp/")
 def get_xp():
     data = get_user_data_logic()
     return jsonify({"xp": data.get("xp", 0)})
 
-@app.route("/get-progress")
+@app.route("/get-progress/")
 def get_progress():
     return jsonify(get_user_data_logic())
 
@@ -87,7 +87,7 @@ def get_user_data_logic():
     else:
         return {"xp": 0, "lesson1quiz1": 0, "lesson1quiz2": 0, "lesson2quiz1": 0, "lesson2quiz2": 0, "lesson3quiz1": 0, "lesson3quiz2": 0}
 
-@app.route("/reset-progress", methods=["POST"])
+@app.route("/reset-progress/", methods=["POST"])
 def reset_all_progress():
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
@@ -100,7 +100,7 @@ def reset_all_progress():
     conn.close()
     return jsonify({"status": "success"})
 
-@app.route("/save-quiz", methods=["POST"])
+@app.route("/save-quiz/", methods=["POST"])
 def save_quiz():
     data = request.get_json(force=True, silent=True)
     if not data:
