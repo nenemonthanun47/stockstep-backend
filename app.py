@@ -87,11 +87,8 @@ def get_user_data_logic():
     else:
         return {"xp": 0, "lesson1quiz1": 0, "lesson1quiz2": 0, "lesson2quiz1": 0, "lesson2quiz2": 0, "lesson3quiz1": 0, "lesson3quiz2": 0}
 
-@app.route("/reset-progress", methods=["GET", "POST", "OPTIONS"])
+@app.route("/reset-progress", methods=["POST"])
 def reset_all_progress():
-    if request.method == "OPTIONS":
-        return jsonify({"status": "ok"})
-    
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
     c.execute("""UPDATE users SET 
@@ -103,15 +100,9 @@ def reset_all_progress():
     conn.close()
     return jsonify({"status": "success"})
 
-@app.route("/save-quiz", methods=["GET", "POST", "OPTIONS"])
+@app.route("/save-quiz", methods=["POST"])
 def save_quiz():
-    if request.method == "OPTIONS":
-        return jsonify({"status": "ok"})
-        
-    if request.method == "GET":
-        return jsonify({"message": "This endpoint requires a POST request with JSON data"}), 405
-
-    data = request.json
+    data = request.get_json(force=True, silent=True)
     if not data:
         return jsonify({"status": "error", "message": "No JSON data provided"}), 400
         
