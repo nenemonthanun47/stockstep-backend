@@ -52,12 +52,14 @@ def home():
 
 @app.route("/get-xp")
 def get_xp():
-    # Delegate to get_progress logic to ensure consistent XP calculation
-    progress_response = get_progress()
-    return jsonify({"xp": progress_response.get_json().get("xp", 0)})
+    data = get_user_data_logic()
+    return jsonify({"xp": data.get("xp", 0)})
 
 @app.route("/get-progress")
 def get_progress():
+    return jsonify(get_user_data_logic())
+
+def get_user_data_logic():
     conn = sqlite3.connect("database.db")
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
@@ -67,7 +69,6 @@ def get_progress():
 
     if user_data:
         data = dict(user_data)
-        # Ensure quiz data are integers for calculation
         for key in ["lesson1quiz1", "lesson1quiz2", "lesson2quiz1", "lesson2quiz2", "lesson3quiz1", "lesson3quiz2"]:
             data[key] = int(data.get(key) or 0)
 
@@ -81,14 +82,14 @@ def get_progress():
         ) * 10
 
         data["xp"] = xp
-
-        return jsonify(data)
+        return data
     else:
-        # This case should be handled by init_db, but as a fallback:
-        return jsonify({"xp": 0, "lesson1quiz1": 0, "lesson1quiz2": 0, "lesson2quiz1": 0, "lesson2quiz2": 0, "lesson3quiz1": 0, "lesson3quiz2": 0})
+        return {"xp": 0, "lesson1quiz1": 0, "lesson1quiz2": 0, "lesson2quiz1": 0, "lesson2quiz2": 0, "lesson3quiz1": 0, "lesson3quiz2": 0}
 
-@app.route("/reset-progress", methods=["GET","POST"])
+@app.route("/reset-progress", methods=["GET", "POST", "OPTIONS"])
 def reset_all_progress():
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"})
     conn = sqlite3.connect("database.db")
     c = conn.cursor()
     c.execute("""UPDATE users SET 
@@ -100,8 +101,10 @@ def reset_all_progress():
     conn.close()
     return jsonify({"status": "success"})
 
-@app.route("/save-quiz", methods=["POST"])
+@app.route("/save-quiz", methods=["POST", "OPTIONS"])
 def save_quiz():
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"})
     data = request.json
 
     quiz = data["quiz"]   # e.g. "lesson1quiz1"
